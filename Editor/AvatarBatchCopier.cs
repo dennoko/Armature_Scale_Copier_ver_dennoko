@@ -5,11 +5,10 @@ using System.Linq;
 
 namespace ShimotukiRieru.ArmatureScaleCopier
 {
-    /// <summary>
-    /// Armature関連の一括操作ユーティリティ
-    /// </summary>
     public class ArmatureBatchOperations : EditorWindow
     {
+        // ─── Fields ──────────────────────────────────────────────────────────
+
         private Vector2 scrollPosition;
         private List<GameObject> ArmatureObjects = new List<GameObject>();
         private GameObject sourceArmature;
@@ -27,19 +26,27 @@ namespace ShimotukiRieru.ArmatureScaleCopier
         private bool copyMAComponents = true;
         private bool copyOtherComponents = false;
 
+        // ─── Status ──────────────────────────────────────────────────────────
+
+        private string _statusMessage  = "準備完了";
+        private int    _statusLevel    = 0; // 0=info 1=success 2=warning 3=error
+        private double _statusResetTime = -1.0;
+
+        // ─── Window Registration ─────────────────────────────────────────────
+
         [MenuItem("dennokoworks/ArmatureScaleCopier_ver.dennoko/Avatar Batch Copier")]
         public static void ShowWindow()
         {
             GetWindow<ArmatureBatchOperations>("Avatar Batch Copier");
         }
 
+        // ─── Lifecycle ───────────────────────────────────────────────────────
+
         private void OnEnable()
         {
             RefreshActiveAvatars();
             if (autoFindArmatures && searchRoot != null && _activeAvatars.Count == 0)
-            {
                 FindAllArmatures();
-            }
         }
 
         private void OnFocus()
@@ -75,235 +82,290 @@ namespace ShimotukiRieru.ArmatureScaleCopier
             FindAllArmatures();
         }
 
-        private void DrawAvatarAutoDetectSection()
-        {
-            GUILayout.Label("アバター自動認識", EditorStyles.boldLabel);
-
-            if (!VRCHelper.IsVRCSdkAvailable)
-            {
-                EditorGUILayout.HelpBox("VRC SDK未検出のため、アバターの自動認識は利用できません。", MessageType.Info);
-                GUILayout.Space(10);
-                return;
-            }
-
-            EditorGUILayout.BeginHorizontal();
-
-            if (_activeAvatars.Count == 0)
-            {
-                using (new EditorGUI.DisabledScope(true))
-                {
-                    EditorGUILayout.Popup("アクティブアバター", 0, new[] { "アバターが見つかりません" });
-                }
-            }
-            else
-            {
-                string[] names = _activeAvatars.Select(a => a.name).ToArray();
-                int clampedIndex = Mathf.Clamp(_selectedAvatarIndex, 0, names.Length - 1);
-                int newIndex = EditorGUILayout.Popup("アクティブアバター", clampedIndex, names);
-                if (newIndex != _selectedAvatarIndex)
-                {
-                    _selectedAvatarIndex = newIndex;
-                    ApplySelectedAvatar();
-                }
-            }
-
-            if (GUILayout.Button("更新", GUILayout.Width(50)))
-            {
-                RefreshActiveAvatars();
-            }
-
-            EditorGUILayout.EndHorizontal();
-            GUILayout.Space(10);
-        }
+        // ─── OnGUI Entry Point ───────────────────────────────────────────────
 
         private void OnGUI()
         {
-            scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+            if (_statusResetTime > 0 && EditorApplication.timeSinceStartup > _statusResetTime)
+            {
+                _statusMessage   = "準備完了";
+                _statusLevel     = 0;
+                _statusResetTime = -1.0;
+            }
 
-            DrawAvatarAutoDetectSection();
+            ArmatureScaleCopierTheme.Initialize();
+            ArmatureScaleCopierTheme.PushEditorTheme();
+            try
+            {
+                EditorGUI.DrawRect(new Rect(0, 0, position.width, position.height), ArmatureScaleCopierTheme.Surface0);
+
+                DrawHeader();
+
+                scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+                DrawSettingsArea();
+                EditorGUILayout.EndScrollView();
+
+                DrawFooter();
+                DrawStatusBar();
+            }
+            finally
+            {
+                ArmatureScaleCopierTheme.PopEditorTheme();
+            }
+        }
+
+        // ─── Header ──────────────────────────────────────────────────────────
+
+        private void DrawHeader()
+        {
+            EditorGUILayout.Space(6);
+            GUILayout.BeginHorizontal();
+            GUILayout.Space(6);
+            GUILayout.Label("Avatar Batch Copier", ArmatureScaleCopierTheme.TitleStyle);
+            GUILayout.FlexibleSpace();
+            GUILayout.Space(6);
+            GUILayout.EndHorizontal();
+            EditorGUILayout.Space(6);
+            DrawSeparator();
+        }
+
+        // ─── Settings Area ───────────────────────────────────────────────────
+
+        private void DrawSettingsArea()
+        {
+            GUILayout.BeginVertical();
+
+            // アバター自動認識
+            DrawSection("アバター自動認識", () =>
+            {
+                if (!VRCHelper.IsVRCSdkAvailable)
+                {
+                    EditorGUILayout.HelpBox("VRC SDK未検出のため、アバターの自動認識は利用できません。", MessageType.Info);
+                    return;
+                }
+
+                GUILayout.BeginHorizontal();
+                if (_activeAvatars.Count == 0)
+                {
+                    using (new EditorGUI.DisabledScope(true))
+                        EditorGUILayout.Popup("アクティブアバター", 0, new[] { "アバターが見つかりません" });
+                }
+                else
+                {
+                    string[] names = _activeAvatars.Select(a => a.name).ToArray();
+                    int clampedIndex = Mathf.Clamp(_selectedAvatarIndex, 0, names.Length - 1);
+                    int newIndex = EditorGUILayout.Popup("アクティブアバター", clampedIndex, names);
+                    if (newIndex != _selectedAvatarIndex)
+                    {
+                        _selectedAvatarIndex = newIndex;
+                        ApplySelectedAvatar();
+                    }
+                }
+                if (GUILayout.Button("更新", ArmatureScaleCopierTheme.MiniButtonStyle, GUILayout.Width(50)))
+                    RefreshActiveAvatars();
+                GUILayout.EndHorizontal();
+            });
 
             // 検索範囲
-            GUILayout.Label("検索範囲", EditorStyles.boldLabel);
-            searchRoot = (GameObject)EditorGUILayout.ObjectField("検索対象オブジェクト", searchRoot, typeof(GameObject), true);
+            DrawSection("検索範囲", () =>
+            {
+                var newRoot = (GameObject)EditorGUILayout.ObjectField("検索対象オブジェクト", searchRoot, typeof(GameObject), true);
+                if (newRoot != searchRoot)
+                    searchRoot = newRoot;
+            });
 
-            // 検索対象が変更された場合の自動再検索
+            // searchRoot 変更時の自動再検索
             if (autoFindArmatures && searchRoot != previousSearchRoot)
             {
                 previousSearchRoot = searchRoot;
-
-                // そのオブジェクト内にあるArmatureがあればsourceArmatureに代入
-                sourceArmature = searchRoot.transform.Find("Armature")?.gameObject;
-
-                // Armatureオブジェクトを再検索
+                if (searchRoot != null)
+                    sourceArmature = searchRoot.transform.Find("Armature")?.gameObject;
                 FindAllArmatures();
             }
-
-            GUILayout.Space(10);
 
             // 設定
-            GUILayout.Label("設定", EditorStyles.boldLabel);
-            autoFindArmatures = EditorGUILayout.Toggle("自動的にArmatureを検索", autoFindArmatures);
-            includeInactive = EditorGUILayout.Toggle("非アクティブオブジェクトも含む", includeInactive);
-
-            GUILayout.Space(10);
-
-
-            if (GUILayout.Button("Armatureオブジェクトを再検索"))
+            DrawSection("設定", () =>
             {
-                FindAllArmatures();
-            }
+                autoFindArmatures = EditorGUILayout.Toggle("自動的にArmatureを検索", autoFindArmatures);
+                includeInactive   = EditorGUILayout.Toggle("非アクティブオブジェクトも含む", includeInactive);
+                EditorGUILayout.Space(4);
+                if (GUILayout.Button("Armatureオブジェクトを再検索", ArmatureScaleCopierTheme.SecondaryButtonStyle))
+                    FindAllArmatures();
+            });
 
-            GUILayout.Space(15);
-
-
-            copyTransforms = EditorGUILayout.Toggle("Transform情報をコピー", copyTransforms);
-            if (copyTransforms)
+            // Transform コピーオプション
+            DrawToggleSection("Transform 情報をコピー", ref copyTransforms, () =>
             {
-                copyTransformsScale = EditorGUILayout.Toggle("  スケールをコピー", copyTransformsScale);
-                copyTransformsPosition = EditorGUILayout.Toggle("  位置をコピー", copyTransformsPosition);
-                copyTransformsRotation = EditorGUILayout.Toggle("  回転をコピー", copyTransformsRotation);
-            }
-            copyMAComponents = EditorGUILayout.Toggle("MAコンポーネントをコピー", copyMAComponents);
-            copyOtherComponents = EditorGUILayout.Toggle("その他のコンポーネントをコピー", copyOtherComponents);
+                copyTransformsScale    = EditorGUILayout.Toggle("スケールをコピー",   copyTransformsScale);
+                copyTransformsPosition = EditorGUILayout.Toggle("位置をコピー",       copyTransformsPosition);
+                copyTransformsRotation = EditorGUILayout.Toggle("回転をコピー",       copyTransformsRotation);
+            });
 
-            if (copyOtherComponents)
+            // コンポーネントオプション
+            DrawSection("コンポーネント設定", () =>
             {
-                EditorGUILayout.HelpBox("その他のコンポーネントをコピーすると、不明瞭なエラーが発生して正しく動作しない可能性があります。\n" +
-                                        "このオプションは慎重に使用してください。", MessageType.Warning);
-            }
-
-            GUILayout.Space(15);
-
-            // ソースArmature
-            GUILayout.Label("コピー元 Armature", EditorStyles.boldLabel);
-            sourceArmature = (GameObject)EditorGUILayout.ObjectField(sourceArmature, typeof(GameObject), true);
-
-            if (sourceArmature != null && !IsValidArmature(sourceArmature))
-            {
-                EditorGUILayout.HelpBox("選択されたオブジェクトは有効なArmatureではありません。", MessageType.Warning);
-            }
-
-            GUILayout.Space(15);
-
-            // Armature一覧
-
-            if (searchRoot != null)
-            {
-                string searchScopeText = $"'{searchRoot.name}' 内の";
-                GUILayout.Label($"{searchScopeText}Armatureオブジェクト ({ArmatureObjects.Count}個)", EditorStyles.boldLabel);
-            }
-
-            if (ArmatureObjects.Count == 0)
-            {
-                if (searchRoot != null)
+                copyMAComponents    = EditorGUILayout.Toggle("MAコンポーネントをコピー",       copyMAComponents);
+                copyOtherComponents = EditorGUILayout.Toggle("その他のコンポーネントをコピー", copyOtherComponents);
+                if (copyOtherComponents)
                 {
-                    string noResultMessage = $"'{searchRoot.name}' 内にArmatureオブジェクトが見つかりません。";
-                    EditorGUILayout.HelpBox(noResultMessage, MessageType.Info);
+                    EditorGUILayout.Space(4);
+                    EditorGUILayout.HelpBox(
+                        "その他のコンポーネントをコピーすると、不明瞭なエラーが発生して正しく動作しない可能性があります。\nこのオプションは慎重に使用してください。",
+                        MessageType.Warning);
                 }
-            }
-            else
+            });
+
+            // コピー元 Armature
+            DrawSection("コピー元 Armature", () =>
             {
-                // 全選択/全解除ボタン
-                EditorGUILayout.BeginHorizontal();
-                if (GUILayout.Button("すべて選択"))
+                sourceArmature = (GameObject)EditorGUILayout.ObjectField(sourceArmature, typeof(GameObject), true);
+                if (sourceArmature != null && !IsValidArmature(sourceArmature))
                 {
+                    EditorGUILayout.Space(4);
+                    EditorGUILayout.HelpBox("選択されたオブジェクトは有効なArmatureではありません。", MessageType.Warning);
+                }
+            });
+
+            // Armature 一覧
+            string listTitle = searchRoot != null
+                ? $"Armature 一覧 — '{searchRoot.name}' ({ArmatureObjects.Count} 個)"
+                : "Armature 一覧";
+
+            DrawSection(listTitle, () =>
+            {
+                if (searchRoot == null)
+                {
+                    GUILayout.Label("検索対象オブジェクトを指定してください。", ArmatureScaleCopierTheme.SecondaryTextStyle);
+                    return;
+                }
+
+                if (ArmatureObjects.Count == 0)
+                {
+                    EditorGUILayout.HelpBox($"'{searchRoot.name}' 内にArmatureオブジェクトが見つかりません。", MessageType.Info);
+                    return;
+                }
+
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button("すべて選択", ArmatureScaleCopierTheme.SecondaryButtonStyle))
                     SelectAllArmatures(true);
-                }
-                if (GUILayout.Button("すべて解除"))
-                {
+                if (GUILayout.Button("すべて解除", ArmatureScaleCopierTheme.SecondaryButtonStyle))
                     SelectAllArmatures(false);
-                }
-                EditorGUILayout.EndHorizontal();
+                GUILayout.EndHorizontal();
 
-                GUILayout.Space(10);
+                EditorGUILayout.Space(6);
 
-                // Armature一覧表示
                 for (int i = 0; i < ArmatureObjects.Count; i++)
                 {
-                    if (ArmatureObjects[i] == null)
-                    {
-                        ArmatureObjects.RemoveAt(i);
-                        i--;
-                        continue;
-                    }
+                    if (ArmatureObjects[i] == null) { ArmatureObjects.RemoveAt(i--); continue; }
 
-                    EditorGUILayout.BeginHorizontal();
-
+                    GUILayout.BeginHorizontal();
                     bool wasSelected = Selection.gameObjects.Contains(ArmatureObjects[i]);
-                    bool isSelected = EditorGUILayout.Toggle(wasSelected, GUILayout.Width(20));
-
+                    bool isSelected  = EditorGUILayout.Toggle(wasSelected, GUILayout.Width(20));
                     if (isSelected != wasSelected)
                     {
-                        if (isSelected)
-                        {
-                            var newSelection = Selection.gameObjects.ToList();
-                            newSelection.Add(ArmatureObjects[i]);
-                            Selection.objects = newSelection.ToArray();
-                        }
-                        else
-                        {
-                            var newSelection = Selection.gameObjects.ToList();
-                            newSelection.Remove(ArmatureObjects[i]);
-                            Selection.objects = newSelection.ToArray();
-                        }
+                        var sel = Selection.gameObjects.ToList();
+                        if (isSelected) sel.Add(ArmatureObjects[i]);
+                        else            sel.Remove(ArmatureObjects[i]);
+                        Selection.objects = sel.ToArray();
                     }
-
                     EditorGUILayout.ObjectField(ArmatureObjects[i], typeof(GameObject), true);
-
-                    // 総子オブジェクト数の表示（再帰的）
-                    int totalChildren = CountAllChildren(ArmatureObjects[i].transform);
-                    EditorGUILayout.LabelField($"({totalChildren} objects)", GUILayout.Width(100));
-
-                    EditorGUILayout.EndHorizontal();
+                    int childCount = CountAllChildren(ArmatureObjects[i].transform);
+                    GUILayout.Label($"({childCount})", ArmatureScaleCopierTheme.CaptionStyle, GUILayout.Width(50));
+                    GUILayout.EndHorizontal();
                 }
+            });
 
-                GUILayout.Space(15);
-
-                // 一括操作ボタン
-                GUILayout.Label("一括操作", EditorStyles.boldLabel);
-
-                GUI.enabled = sourceArmature != null && Selection.gameObjects.Length > 0;
-                if (GUILayout.Button("選択されたArmatureにコピー", GUILayout.Height(30)))
-                {
-                    BatchCopyToSelected();
-                }
-                GUI.enabled = true;
-            }
-
-            EditorGUILayout.EndScrollView();
+            GUILayout.EndVertical();
         }
 
-        /// <summary>
-        /// 指定範囲内のすべてのArmatureオブジェクトを検索
-        /// </summary>
+        // ─── Footer ──────────────────────────────────────────────────────────
+
+        private void DrawFooter()
+        {
+            GUILayout.BeginVertical(ArmatureScaleCopierTheme.CardStyle);
+            DrawSeparator();
+
+            bool canCopy = sourceArmature != null && Selection.gameObjects.Length > 0;
+            using (new EditorGUI.DisabledScope(!canCopy))
+            {
+                if (GUILayout.Button("選択されたArmatureにコピー", ArmatureScaleCopierTheme.ActionButtonStyle))
+                    BatchCopyToSelected();
+            }
+
+            GUILayout.EndVertical();
+        }
+
+        // ─── Status Bar ──────────────────────────────────────────────────────
+
+        private void DrawStatusBar()
+        {
+            GUILayout.Box(_statusMessage, ArmatureScaleCopierTheme.GetStatusStyle(_statusLevel), GUILayout.ExpandWidth(true));
+        }
+
+        // ─── Section Helpers ─────────────────────────────────────────────────
+
+        private void DrawSection(string title, System.Action content)
+        {
+            GUILayout.BeginVertical(ArmatureScaleCopierTheme.CardStyle);
+            GUILayout.Label(title, ArmatureScaleCopierTheme.SectionHeaderStyle);
+            DrawSeparator();
+            content?.Invoke();
+            GUILayout.EndVertical();
+        }
+
+        private void DrawToggleSection(string title, ref bool toggle, System.Action content)
+        {
+            GUILayout.BeginVertical(ArmatureScaleCopierTheme.CardStyle);
+
+            GUILayout.BeginHorizontal();
+            var headerStyle = toggle ? ArmatureScaleCopierTheme.ToggleSectionOnStyle : ArmatureScaleCopierTheme.ToggleSectionOffStyle;
+            EditorGUI.BeginChangeCheck();
+            bool newToggle = EditorGUILayout.ToggleLeft(title, toggle, headerStyle, GUILayout.ExpandWidth(true));
+            if (EditorGUI.EndChangeCheck()) { toggle = newToggle; Repaint(); }
+            GUILayout.EndHorizontal();
+
+            DrawSeparator();
+
+            using (new EditorGUI.DisabledGroupScope(!toggle))
+                content?.Invoke();
+
+            GUILayout.EndVertical();
+        }
+
+        private void DrawSeparator()
+        {
+            var rect = GUILayoutUtility.GetRect(0, 1, GUILayout.ExpandWidth(true));
+            EditorGUI.DrawRect(rect, ArmatureScaleCopierTheme.Outline);
+            EditorGUILayout.Space(4);
+        }
+
+        private void SetStatus(string message, int level, double autoResetSeconds = 3.0)
+        {
+            _statusMessage   = message;
+            _statusLevel     = level;
+            _statusResetTime = level == 0 ? -1.0 : EditorApplication.timeSinceStartup + autoResetSeconds;
+            Repaint();
+        }
+
+        // ─── Logic ───────────────────────────────────────────────────────────
+
         private void FindAllArmatures()
         {
             ArmatureObjects.Clear();
 
-            GameObject[] allObjects;
+            if (searchRoot == null) return;
 
-            if (searchRoot == null)
-            {
-                // シーン全体で検索しないように。
-                return;
-            }
-
-            // 指定オブジェクト内から検索
-            allObjects = searchRoot.GetComponentsInChildren<Transform>(includeInactive)
+            var allObjects = searchRoot.GetComponentsInChildren<Transform>(includeInactive)
                 .Select(t => t.gameObject)
                 .ToArray();
 
             foreach (var obj in allObjects)
             {
                 if (IsValidArmature(obj) &&
-                    obj.scene.isLoaded && // シーンに存在するオブジェクトのみ
-                    !EditorUtility.IsPersistent(obj)) // プレハブではないオブジェクトのみ
+                    obj.scene.isLoaded &&
+                    !EditorUtility.IsPersistent(obj) &&
+                    obj != sourceArmature)
                 {
-                    if (obj == sourceArmature)
-                    {
-                        // ソースArmatureは除外
-                        continue;
-                    }
                     ArmatureObjects.Add(obj);
                 }
             }
@@ -311,32 +373,19 @@ namespace ShimotukiRieru.ArmatureScaleCopier
             ArmatureObjects.Sort((a, b) => string.Compare(a.name, b.name));
         }
 
-        /// <summary>
-        /// オブジェクトがArmatureかどうかを判定
-        /// </summary>
         private bool IsValidArmature(GameObject obj)
         {
             return ValidationHelper.IsValidArmature(obj);
         }
 
-        /// <summary>
-        /// すべてのArmatureの選択状態を変更
-        /// </summary>
         private void SelectAllArmatures(bool select)
         {
             if (select)
-            {
                 Selection.objects = ArmatureObjects.Where(obj => obj != null).ToArray();
-            }
             else
-            {
                 Selection.objects = new Object[0];
-            }
         }
 
-        /// <summary>
-        /// 選択されたArmatureにソースのデータを一括コピー（再帰処理）
-        /// </summary>
         private void BatchCopyToSelected()
         {
             if (sourceArmature == null) return;
@@ -350,121 +399,89 @@ namespace ShimotukiRieru.ArmatureScaleCopier
                 return;
             }
 
-            // ソースデータの収集（再帰的）
             var sourceData = new ArmatureData();
             foreach (Transform child in sourceArmature.transform)
-            {
-                var childData = CopyChildObjectDataRecursive(child);
-                sourceData.childrenData.Add(childData);
-            }
+                sourceData.childrenData.Add(CopyChildObjectDataRecursive(child));
 
-            // 各ターゲットに適用
             foreach (var target in selectedArmatures)
             {
                 Undo.RegisterCompleteObjectUndo(target, "Batch Copy Armature Data");
-
                 foreach (var childData in sourceData.childrenData)
-                {
                     ApplyChildObjectDataRecursive(childData, target.transform);
-                }
             }
 
             int totalObjects = CountTotalObjects(sourceData.childrenData);
-            Debug.Log($"{selectedArmatures.Length}個のArmatureに '{sourceArmature.name}' のデータをコピーしました。総オブジェクト数: {totalObjects}");
+            Debug.Log($"[ArmatureScaleCopier] {selectedArmatures.Length}個のArmatureに '{sourceArmature.name}' のデータをコピーしました。総オブジェクト数: {totalObjects}");
+            SetStatus($"{selectedArmatures.Length} 個のArmatureにコピーしました。", 1);
         }
 
-        /// <summary>
-        /// 子オブジェクトのデータを再帰的にコピー
-        /// </summary>
         private ChildObjectData CopyChildObjectDataRecursive(Transform transform)
         {
             var childData = new ChildObjectData
             {
-                name = transform.name,
+                name          = transform.name,
                 localPosition = transform.localPosition,
                 localRotation = transform.localRotation,
-                localScale = transform.localScale,
+                localScale    = transform.localScale,
                 componentData = new List<ComponentData>(),
-                childrenData = new List<ChildObjectData>()
+                childrenData  = new List<ChildObjectData>()
             };
 
-            // コンポーネントデータの収集
-            var components = transform.GetComponents<Component>();
-            foreach (var component in components)
+            foreach (var component in transform.GetComponents<Component>())
             {
                 if (component == null || component is Transform) continue;
 
-                bool shouldCopyComponent = false;
-                if (copyMAComponents && IsModularAvatarComponent(component))
-                    shouldCopyComponent = true;
-                if (copyOtherComponents && !IsModularAvatarComponent(component))
-                    shouldCopyComponent = true;
+                bool shouldCopy = false;
+                if (copyMAComponents    && IsModularAvatarComponent(component)) shouldCopy = true;
+                if (copyOtherComponents && !IsModularAvatarComponent(component)) shouldCopy = true;
+                if (!shouldCopy) continue;
 
-                if (!shouldCopyComponent) continue;
-
-                var compData = new ComponentData
+                childData.componentData.Add(new ComponentData
                 {
-                    typeName = component.GetType().AssemblyQualifiedName,
+                    typeName       = component.GetType().AssemblyQualifiedName,
                     serializedData = ArmatureScaleCopierLogger.TryExecute(() => JsonUtility.ToJson(component), "{}", "コンポーネントのシリアライズ")
-                };
-                childData.componentData.Add(compData);
+                });
             }
 
-            // 子オブジェクトを再帰的に処理
             foreach (Transform child in transform)
-            {
-                var childObjectData = CopyChildObjectDataRecursive(child);
-                childData.childrenData.Add(childObjectData);
-            }
+                childData.childrenData.Add(CopyChildObjectDataRecursive(child));
 
             return childData;
         }
 
-        /// <summary>
-        /// 子オブジェクトのデータを再帰的に適用
-        /// </summary>
         private void ApplyChildObjectDataRecursive(ChildObjectData childData, Transform parentTransform)
         {
             Transform existingChild = parentTransform.Find(childData.name);
-            GameObject targetChild;
+            if (existingChild == null) return;
 
-            if (existingChild == null)
-                return;
-
-            targetChild = existingChild.gameObject;
+            var targetChild = existingChild.gameObject;
             Undo.RegisterCompleteObjectUndo(targetChild, "Update Child Object");
 
-            // Transform情報の適用
             if (copyTransforms)
             {
-                if (copyTransformsPosition)
-                    targetChild.transform.localPosition = childData.localPosition;
-                if (copyTransformsRotation)
-                    targetChild.transform.localRotation = childData.localRotation;
-                if (copyTransformsScale)
-                    targetChild.transform.localScale = childData.localScale;
+                if (copyTransformsPosition) targetChild.transform.localPosition = childData.localPosition;
+                if (copyTransformsRotation) targetChild.transform.localRotation = childData.localRotation;
+                if (copyTransformsScale)    targetChild.transform.localScale    = childData.localScale;
             }
 
-            // コンポーネントの適用
             foreach (var compData in childData.componentData)
             {
                 try
                 {
                     var componentType = System.Type.GetType(compData.typeName);
-                    if (componentType != null)
+                    if (componentType == null) continue;
+
+                    var existing = targetChild.GetComponent(componentType);
+                    if (existing != null)
                     {
-                        var existingComponent = targetChild.GetComponent(componentType);
-                        if (existingComponent != null)
-                        {
-                            Undo.RegisterCompleteObjectUndo(existingComponent, "Update Component");
-                            JsonUtility.FromJsonOverwrite(compData.serializedData, existingComponent);
-                        }
-                        else
-                        {
-                            var newComponent = targetChild.AddComponent(componentType);
-                            Undo.RegisterCreatedObjectUndo(newComponent, "Add Component");
-                            JsonUtility.FromJsonOverwrite(compData.serializedData, newComponent);
-                        }
+                        Undo.RegisterCompleteObjectUndo(existing, "Update Component");
+                        JsonUtility.FromJsonOverwrite(compData.serializedData, existing);
+                    }
+                    else
+                    {
+                        var added = targetChild.AddComponent(componentType);
+                        Undo.RegisterCreatedObjectUndo(added, "Add Component");
+                        JsonUtility.FromJsonOverwrite(compData.serializedData, added);
                     }
                 }
                 catch (System.Exception e)
@@ -473,53 +490,34 @@ namespace ShimotukiRieru.ArmatureScaleCopier
                 }
             }
 
-            // 子オブジェクトを再帰的に処理
             if (childData.childrenData != null)
             {
-                foreach (var grandChildData in childData.childrenData)
+                foreach (var grandChild in childData.childrenData)
                 {
-                    if (grandChildData != null)
-                    {
-                        ApplyChildObjectDataRecursive(grandChildData, targetChild.transform);
-                    }
+                    if (grandChild != null)
+                        ApplyChildObjectDataRecursive(grandChild, targetChild.transform);
                 }
             }
         }
 
-        /// <summary>
-        /// 総オブジェクト数をカウント（再帰）
-        /// </summary>
         private int CountTotalObjects(List<ChildObjectData> childrenData)
         {
             if (childrenData == null) return 0;
-
             int count = childrenData.Count;
             foreach (var child in childrenData)
-            {
                 if (child?.childrenData != null)
-                {
                     count += CountTotalObjects(child.childrenData);
-                }
-            }
             return count;
         }
 
-        /// <summary>
-        /// Transform階層の総子オブジェクト数をカウント（再帰）
-        /// </summary>
         private int CountAllChildren(Transform parent)
         {
             int count = parent.childCount;
             foreach (Transform child in parent)
-            {
                 count += CountAllChildren(child);
-            }
             return count;
         }
 
-        /// <summary>
-        /// ModularAvatarコンポーネントかどうかを判定
-        /// </summary>
         private bool IsModularAvatarComponent(Component component)
         {
             return ModularAvatarHelper.IsModularAvatarComponent(component);
