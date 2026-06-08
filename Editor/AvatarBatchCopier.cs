@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 
 namespace ShimotukiRieru.ArmatureScaleCopier
 {
@@ -19,6 +20,10 @@ namespace ShimotukiRieru.ArmatureScaleCopier
 
         private List<GameObject> _activeAvatars = new List<GameObject>();
         private int _selectedAvatarIndex = -1;
+
+        private static System.Type _addonWindowType;
+        private static bool        _addonTypeSearched;
+
         private bool copyTransforms = true;
         private bool copyTransformsScale = true;
         private bool copyTransformsPosition = false;
@@ -225,6 +230,8 @@ namespace ShimotukiRieru.ArmatureScaleCopier
                     EditorGUILayout.HelpBox("選択されたオブジェクトは有効なArmatureではありません。", MessageType.Warning);
                 }
             });
+
+            DrawAddonSection();
 
             // Armature 一覧
             string listTitle = searchRoot != null
@@ -521,6 +528,35 @@ namespace ShimotukiRieru.ArmatureScaleCopier
         private bool IsModularAvatarComponent(Component component)
         {
             return ModularAvatarHelper.IsModularAvatarComponent(component);
+        }
+
+        // ─── Addon Section ────────────────────────────────────────────────────
+
+        private static System.Type GetAddonWindowType()
+        {
+            if (!_addonTypeSearched)
+            {
+                _addonTypeSearched = true;
+                _addonWindowType = System.Type.GetType(
+                    "ShimotukiRieru.ArmatureScaleCopier.Addon.OutfitFitterWindow, " +
+                    "ShimotukiRieru.ArmatureScaleCopier.Addon");
+            }
+            return _addonWindowType;
+        }
+
+        private void DrawAddonSection()
+        {
+            if (GetAddonWindowType() == null) return;
+
+            DrawSection("Outfit Fitter  [Addon]", () =>
+            {
+                if (GUILayout.Button("Outfit Fitter を開く →", ArmatureScaleCopierTheme.SecondaryButtonStyle))
+                {
+                    var method = GetAddonWindowType().GetMethod("ShowWindow",
+                        BindingFlags.Static | BindingFlags.Public);
+                    method?.Invoke(null, null);
+                }
+            });
         }
     }
 }
