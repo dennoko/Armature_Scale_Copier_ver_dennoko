@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEditor;
+using ShimotukiRieru.ArmatureScaleCopier;
 
 namespace ShimotukiRieru.ArmatureScaleCopier.Addon
 {

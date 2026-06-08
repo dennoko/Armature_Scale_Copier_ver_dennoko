@@ -1,7 +1,9 @@
 {
     "name": "ShimotukiRieru.ArmatureScaleCopier.Addon",
     "rootNamespace": "ShimotukiRieru.ArmatureScaleCopier.Addon",
-    "references": [],
+    "references": [
+        "ShimotukiRieru.ArmatureScaleCopier.Editor"
+    ],
     "includePlatforms": [
         "Editor"
     ],

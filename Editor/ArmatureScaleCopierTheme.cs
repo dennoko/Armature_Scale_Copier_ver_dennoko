@@ -3,7 +3,7 @@ using UnityEditor;
 
 namespace ShimotukiRieru.ArmatureScaleCopier
 {
-    internal static class ArmatureScaleCopierTheme
+    public static class ArmatureScaleCopierTheme
     {
         // ─── Colors ──────────────────────────────────────────────────────────
 
