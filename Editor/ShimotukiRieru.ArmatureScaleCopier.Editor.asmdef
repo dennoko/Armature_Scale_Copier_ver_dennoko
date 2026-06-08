@@ -1,0 +1,16 @@
+{
+    "name": "ShimotukiRieru.ArmatureScaleCopier.Editor",
+    "rootNamespace": "dev.rierun.armaturescalecopier",
+    "references": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
