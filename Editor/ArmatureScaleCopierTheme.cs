@@ -341,7 +341,6 @@ namespace ShimotukiRieru.ArmatureScaleCopier
                     new GUIStyleBackup(EditorStyles.objectField),
                     new GUIStyleBackup(EditorStyles.numberField),
                     new GUIStyleBackup(EditorStyles.textField),
-                    new GUIStyleBackup(EditorStyles.popup),
                     new GUIStyleBackup(EditorStyles.toggle)
                 };
             }
@@ -350,16 +349,11 @@ namespace ShimotukiRieru.ArmatureScaleCopier
             FixAllTextColors(EditorStyles.objectField, TextSecondary);
             FixAllTextColors(EditorStyles.numberField, TextSecondary);
             FixAllTextColors(EditorStyles.textField,   TextSecondary);
-            FixAllTextColors(EditorStyles.popup,       TextSecondary);
             FixAllTextColors(EditorStyles.toggle,      TextSecondary);
 
             FixAllStateBackgrounds(EditorStyles.objectField, _texSurface1);
             FixAllStateBackgrounds(EditorStyles.numberField, _texSurface1);
             FixAllStateBackgrounds(EditorStyles.textField,   _texSurface1);
-
-            FixAllStateBackgrounds(EditorStyles.popup, _texCard);
-            EditorStyles.popup.border  = new RectOffset(1, 1, 1, 1);
-            EditorStyles.popup.padding = new RectOffset(6, 18, 4, 4);
         }
 
         public static void PopEditorTheme()

@@ -132,17 +132,32 @@ namespace ShimotukiRieru.ArmatureScaleCopier.Addon
                 }
 
                 GUILayout.BeginHorizontal();
+                EditorGUILayout.PrefixLabel("アクティブアバター");
                 if (_activeAvatars.Count == 0)
                 {
                     using (new EditorGUI.DisabledScope(true))
-                        EditorGUILayout.Popup("アクティブアバター", 0, new[] { "アバターが見つかりません" });
+                    {
+                        EditorGUILayout.DropdownButton(new GUIContent("アバターが見つかりません"), FocusType.Passive, ArmatureScaleCopierTheme.MiniButtonStyle);
+                    }
                 }
                 else
                 {
                     var names   = _activeAvatars.Select(a => a.name).ToArray();
                     int clamped = Mathf.Clamp(_selectedAvatarIdx, 0, names.Length - 1);
-                    int next    = EditorGUILayout.Popup("アクティブアバター", clamped, names);
-                    if (next != _selectedAvatarIdx) _selectedAvatarIdx = next;
+                    string selectedName = names[clamped];
+                    if (EditorGUILayout.DropdownButton(new GUIContent(selectedName + " ▼"), FocusType.Passive, ArmatureScaleCopierTheme.MiniButtonStyle))
+                    {
+                        GenericMenu menu = new GenericMenu();
+                        for (int i = 0; i < names.Length; i++)
+                        {
+                            int index = i;
+                            menu.AddItem(new GUIContent(names[i]), i == clamped, () =>
+                            {
+                                _selectedAvatarIdx = index;
+                            });
+                        }
+                        menu.ShowAsContext();
+                    }
                 }
                 if (GUILayout.Button("更新", ArmatureScaleCopierTheme.MiniButtonStyle, GUILayout.Width(50)))
                     RefreshAvatars();
